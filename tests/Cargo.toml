@@ -1,0 +1,8 @@
+[package]
+name = "gcc-asm-tests"
+version = "0.1.0"
+authors = ["James Duley <jagduley@gmail.com>"]
+
+[dependencies]
+gcc-asm = { path = ".." }
+
