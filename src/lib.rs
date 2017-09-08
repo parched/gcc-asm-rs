@@ -16,6 +16,7 @@
 
 extern crate proc_macro;
 extern crate syn;
+#[macro_use]
 extern crate quote;
 
 use proc_macro::TokenStream;
@@ -27,8 +28,8 @@ use quote::{Tokens, ToTokens};
 pub fn gcc_asm(token_stream: TokenStream) -> TokenStream {
     let tokens = token_stream.to_string();
     let token_trees = parse_token_trees(&tokens).unwrap();
-    let mut symbolic_names = Vec::new();
     let mut parts = split_on_token(token_trees.as_slice(), &Token::Colon);
+
     let template = parts
         .next()
         .expect("error: template missing")
@@ -36,55 +37,30 @@ pub fn gcc_asm(token_stream: TokenStream) -> TokenStream {
         .map(get_string_literal)
         // support C-style string literal concatenation
         .fold(String::new(), |acc, ref x| acc + &*x);
-    let output_operands;
-    let input_operands;
-    {
-        let mut parse_operands = || {
-            let joined_operands = parts.next().unwrap_or(&[]);
+    let output_operands = parts.next().unwrap_or(&[]);
+    let input_operands = parts.next().unwrap_or(&[]);
+    let clobbers = parts.next().unwrap_or(&[]);
 
-            let mut operands = split_on_token(joined_operands, &Token::Comma)
-                .map(|tts| extract_symbolic_name(&mut symbolic_names, tts))
-                .fold(Vec::new(), |mut acc, ref x| {
-                    acc.extend_from_slice(x);
-                    acc.push(TokenTree::Token(Token::Comma));
-                    acc
-                });
-            operands.pop(); // remove the extra comma
-            operands
-        };
-        output_operands = parse_operands();
-        input_operands = parse_operands();
-    }
-    let clobbers = parts.next().unwrap_or(&[]).len();
-
-    assert!(clobbers == 0usize, "error: clobbers not supported yet");
-
+    assert!(
+        clobbers.len() == 0usize,
+        "error: clobbers not supported yet"
+    );
     assert!(parts.next().is_none(), "error: extra tokens after clobbers");
 
+    let mut symbolic_names = Vec::new();
+    let new_output_operands = split_on_token(output_operands, &Token::Comma)
+        .map(|tts| extract_symbolic_name(&mut symbolic_names, tts))
+        .collect::<Vec<_>>();
+    let new_input_operands = split_on_token(input_operands, &Token::Comma)
+        .map(|tts| extract_symbolic_name(&mut symbolic_names, tts))
+        .collect::<Vec<_>>();
     let new_template = replace_template(template, symbolic_names.as_slice());
 
-    let mut new_token_trees = Vec::new();
-    new_token_trees.push(TokenTree::Token(
-        Token::Literal(Lit::Str(new_template, StrStyle::Cooked)),
-    ));
-    new_token_trees.push(TokenTree::Token(Token::Colon));
-    new_token_trees.extend_from_slice(output_operands.as_slice());
-    new_token_trees.push(TokenTree::Token(Token::Colon));
-    new_token_trees.extend_from_slice(input_operands.as_slice());
-
-    let mac = Mac {
-        path: Path::from("asm"),
-        tts: vec![
-            TokenTree::Delimited(Delimited {
-                delim: DelimToken::Paren,
-                tts: new_token_trees,
-            }),
-        ],
+    let mut new_tokens =
+        quote! {
+        asm!(#new_template : #(#(#new_output_operands)*),* : #(#(#new_input_operands)*),*)
     };
-
-    let mut new_tokens = Tokens::new();
-    mac.to_tokens(&mut new_tokens);
-    //println!("{}", new_tokens);
+    // println!("{}", new_tokens);
     TokenStream::from_str(new_tokens.as_str()).unwrap()
 }
 

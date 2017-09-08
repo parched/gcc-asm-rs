@@ -33,7 +33,7 @@ fn test_add() {
     let a = 1;
     let b = 2;
     let c;
-    // unsafe {asm!("add $0, $1, $2" : "=r"(c), : "r"(a), "r"(b),)};
+    // unsafe {asm!("add $0, $1, $2" : "=r"(c) : "r"(a), "r"(b))};
     unsafe {gcc_asm!("add %0, %1, %2" : "=r"(c) : "r"(a), "r"(b))};
     assert_eq!(3, c);
 }
@@ -44,7 +44,7 @@ fn test_add_multi_string() {
     let a = 1;
     let b = 2;
     let c;
-    // unsafe {asm!("add $0, $1, $2" : "=r"(c), : "r"(a), "r"(b),)};
+    // unsafe {asm!("add $0, $1, $2" : "=r"(c) : "r"(a), "r"(b))};
     unsafe {gcc_asm!("add %0, ""%1, %2" : "=r"(c) : "r"(a), "r"(b))};
     assert_eq!(3, c);
 }
@@ -55,7 +55,7 @@ fn test_add_symbolic() {
     let a = 1;
     let b = 2;
     let c;
-    // unsafe {asm!("add $0, $1, $2" : "=r"(c), : "r"(a), "r"(b),)};
+    // unsafe {asm!("add $0, $1, $2" : "=r"(c) : "r"(a), "r"(b))};
     unsafe {gcc_asm!("add %[c], %[a], %[b]" : [c]"=r"(c) : [a]"r"(a), [b]"r"(b))};
     assert_eq!(3, c);
 }
