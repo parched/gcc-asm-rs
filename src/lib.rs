@@ -48,17 +48,33 @@ pub fn gcc_asm(token_stream: TokenStream) -> TokenStream {
     assert!(parts.next().is_none(), "error: extra tokens after clobbers");
 
     let mut symbolic_names = Vec::new();
-    let new_output_operands = split_on_token(output_operands, &Token::Comma)
+    let (new_output_operands, tied_input_operands) = split_on_token(output_operands, &Token::Comma)
         .map(|tts| extract_symbolic_name(&mut symbolic_names, tts))
-        .collect::<Vec<_>>();
+        .enumerate()
+        .map(extract_tied_operands)
+        .fold((Vec::new(), Vec::new()), |mut acc, x| {
+            acc.0.push(x.0);
+            if let Some(t) = x.1 {
+                acc.1.push(t)
+            };
+            acc
+        });
     let new_input_operands = split_on_token(input_operands, &Token::Comma)
         .map(|tts| extract_symbolic_name(&mut symbolic_names, tts))
         .collect::<Vec<_>>();
     let new_template = replace_template(template, symbolic_names.as_slice());
+    let all_new_input_operands = new_input_operands.iter().chain(tied_input_operands.iter());
 
-    let mut new_tokens =
+    // println!(
+    //     "out: {:?}\nin: {:?}\ntied: {:?}",
+    //     new_output_operands,
+    //     new_input_operands,
+    //     tied_input_operands
+    // );
+
+    let new_tokens =
         quote! {
-        asm!(#new_template : #(#(#new_output_operands)*),* : #(#(#new_input_operands)*),*)
+        asm!(#new_template : #(#(#new_output_operands)*),* : #(#(#all_new_input_operands)*),*)
     };
     // println!("{}", new_tokens);
     TokenStream::from_str(new_tokens.as_str()).unwrap()
@@ -101,10 +117,10 @@ fn replace_template(template: String, symbolic_names: &[Option<String>]) -> Stri
         .replace("\u{80}", "$$")
 }
 
-fn extract_symbolic_name<'a>(
+fn extract_symbolic_name(
     ordered_list: &mut Vec<Option<String>>,
-    tts: &'a [TokenTree],
-) -> &'a [TokenTree] {
+    tts: &[TokenTree],
+) -> Vec<TokenTree> {
     let name_and_remaining = match *tts.first().expect("error: empty operand") {
         TokenTree::Delimited(ref d) => {
             assert!(d.delim == DelimToken::Bracket, "error: bad operand");
@@ -122,12 +138,47 @@ fn extract_symbolic_name<'a>(
         _ => (None, tts),
     };
     ordered_list.push(name_and_remaining.0);
-    name_and_remaining.1
+    let mut without_name = Vec::new();
+    without_name.extend_from_slice(name_and_remaining.1);
+    without_name
+}
+
+fn extract_tied_operands(
+    pos_and_tts: (usize, Vec<TokenTree>),
+) -> (Vec<TokenTree>, Option<Vec<TokenTree>>) {
+    {
+        let constraint = get_string_literal(pos_and_tts.1.first().expect("error: empty operand"));
+        if constraint.starts_with("+") {
+            let lvalue = pos_and_tts.1.split_at(1).1;
+
+            let new_input_constraint = pos_and_tts.0.to_string();
+            let mut input = Vec::new();
+            input.push(make_string_literal(new_input_constraint));
+            input.extend_from_slice(lvalue);
+
+            let new_output_constraint = constraint.replace("+", "=");
+            let mut output = Vec::new();
+            output.push(make_string_literal(new_output_constraint));
+            output.extend_from_slice(lvalue);
+
+            return (output, Some(input));
+        }
+    }
+    (pos_and_tts.1, None)
 }
 
 fn get_string_literal(tt: &TokenTree) -> &String {
     match *tt {
         TokenTree::Token(Token::Literal(Lit::Str(ref string, _))) => string,
-        _ => panic!("error: expected a string literal"),
+        _ => {
+            panic!(format!(
+                "error: expected a string literal but found {:?}",
+                tt
+            ))
+        }
     }
+}
+
+fn make_string_literal(string: String) -> TokenTree {
+    TokenTree::Token(Token::Literal(Lit::Str(string, StrStyle::Cooked)))
 }

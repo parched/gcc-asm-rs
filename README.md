@@ -26,4 +26,4 @@ fn add() {
 - [x] `%=`
 - [ ] `m` constraint
 - [ ] `volatile`
-- [ ] `+` constraint modifier
+- [x] `+` constraint modifier

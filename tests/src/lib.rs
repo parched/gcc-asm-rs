@@ -66,3 +66,24 @@ fn test_uid() {
     // unsafe {asm!("b unique_label${:uid}\n\tnop\nunqiue_label${uid}")};
     unsafe {gcc_asm!("b unique_label%=\nnop\nunique_label%=:")};
 }
+
+#[test]
+#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+fn test_add_tied() {
+    let a = 1;
+    let b = 2;
+    let c;
+    // unsafe {asm!("add $0, $1, $0" : "=r"(c) : "r"(a), "0"(b))};
+    unsafe {gcc_asm!("add %0, %1, %0" : "=r"(c) : "r"(a), "0"(b))};
+    assert_eq!(3, c);
+}
+
+#[test]
+#[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+fn test_add_tied_with_plus() {
+    let a = 1;
+    let mut b = 2;
+    // unsafe {asm!("add $0, $1, $0" : "=r"(b) : "r"(a), "0"(b))};
+    unsafe {gcc_asm!("add %0, %1, %0" : "+r"(b) : "r"(a))};
+    assert_eq!(3, b);
+}
