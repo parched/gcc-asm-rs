@@ -21,8 +21,7 @@ extern crate quote;
 
 use proc_macro::TokenStream;
 use std::str::FromStr;
-use syn::{parse_token_trees, Token, TokenTree, Lit, Delimited, DelimToken, StrStyle, Mac, Path};
-use quote::{Tokens, ToTokens};
+use syn::{parse_token_trees, Token, TokenTree, Lit, DelimToken, StrStyle};
 
 #[proc_macro]
 pub fn gcc_asm(token_stream: TokenStream) -> TokenStream {
@@ -65,6 +64,14 @@ pub fn gcc_asm(token_stream: TokenStream) -> TokenStream {
     let new_template = replace_template(template, symbolic_names.as_slice());
     let all_new_input_operands = new_input_operands.iter().chain(tied_input_operands.iter());
 
+    let is_volatile = new_output_operands.len() == 0;
+    
+    let mut options = Vec::new();
+    if is_volatile {
+        options.push("volatile");
+    }
+
+
     // println!(
     //     "out: {:?}\nin: {:?}\ntied: {:?}",
     //     new_output_operands,
@@ -74,7 +81,13 @@ pub fn gcc_asm(token_stream: TokenStream) -> TokenStream {
 
     let new_tokens =
         quote! {
-        asm!(#new_template : #(#(#new_output_operands)*),* : #(#(#all_new_input_operands)*),*)
+        asm!(
+            #new_template :
+            #(#(#new_output_operands)*),* :
+            #(#(#all_new_input_operands)*),* :
+            :
+            #(#options),*
+        )
     };
     // println!("{}", new_tokens);
     TokenStream::from_str(new_tokens.as_str()).unwrap()
